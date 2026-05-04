@@ -14,6 +14,7 @@ def get_config():
         "depth": 4,
         "model_folder": "weights",
         "model_basename": "kmixer-model_",
+        "resume_epoch": None,
     }
 
 

@@ -31,6 +31,7 @@ def get_accuracy(loader, model):
 
 
 config = get_config()
+resume_epoch = config.get("resume_epoch")
 
 Path(config["model_folder"]).mkdir(parents=True, exist_ok=True)
 
@@ -81,9 +82,19 @@ model = KANMixer(
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
 
+start_epoch = 0
+if resume_epoch is not None:
+    checkpoint_path = get_weights_file_path(config, str(resume_epoch))
+    print(f"Resuming from checkpoint: {checkpoint_path}")
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    start_epoch = resume_epoch
+    print(f"Resuming training from epoch {start_epoch + 1}")
+
 num_epochs = config["num_epochs"]
 
-for epoch in range(num_epochs):
+for epoch in range(start_epoch, num_epochs):
     model.train()
     loop = tqdm(enumerate(train_loader), total=len(train_loader), leave=False)
     for batch_index, (images, targets) in loop:

@@ -79,6 +79,17 @@ def train_model(
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
 
+    start_epoch = 0
+    resume_epoch = config.get("resume_epoch")
+    if resume_epoch is not None:
+        checkpoint_path = get_weights_file_path(config, str(resume_epoch))
+        print(f"Resuming from checkpoint: {checkpoint_path}")
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        start_epoch = checkpoint.get("epoch", resume_epoch - 1) + 1
+        print(f"Resuming training from epoch {start_epoch + 1}")
+
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total parameters: {total_params:,}")
 
@@ -86,7 +97,7 @@ def train_model(
     train_accuracies = []
     test_accuracies = []
 
-    for epoch in range(config["num_epochs"]):
+    for epoch in range(start_epoch, config["num_epochs"]):
         model.train()
         running_loss = 0.0
 
