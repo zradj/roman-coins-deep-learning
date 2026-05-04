@@ -9,7 +9,7 @@ def get_coin_config():
         "channel_dim": 256,
         "token_dim": 128,
         "depth": 6,
-        "patch_size": 4,
+        "patch_size": 8,
         "learning_rate": 1e-3,
         "batch_size": 128,
         "num_epochs": 20,
