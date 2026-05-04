@@ -11,7 +11,7 @@ def get_coin_config():
         "depth": 6,
         "patch_size": 8,
         "learning_rate": 1e-3,
-        "batch_size": 64,
+        "batch_size": 32,
         "num_epochs": 20,
         "model_folder": "weights_coins",
         "model_basename": "kan_mixer_coins_",
