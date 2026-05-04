@@ -4,7 +4,7 @@ from pathlib import Path
 def get_coin_config():
     return {
         "in_channels": 3,
-        "image_size": 64,
+        "image_size": 256,
         "num_classes": 100,
         "channel_dim": 256,
         "token_dim": 128,
