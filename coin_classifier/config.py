@@ -15,7 +15,7 @@ def get_coin_config():
         "num_epochs": 20,
         "model_folder": "weights_coins",
         "model_basename": "kan_mixer_coins_",
-        "resume_epoch": 4,
+        "resume_epoch": None,
     }
 
 

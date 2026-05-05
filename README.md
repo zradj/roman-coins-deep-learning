@@ -48,7 +48,7 @@ roman-coins-deep-learning/
 └── README.md
 ```
 
-The main notebook (`roman_coins_deep_learning.ipynb`) imports all functionality from the `coin_classifier` package rather than defining anything inline. The package can also be used independently:
+The main notebook (`roman_coins_deep_learning.ipynb`) imports all functionality from the `coin_classifier` package rather than defining anything inline — including the training loop itself via `train_model()`. The package can also be used independently:
 
 ```python
 from coin_classifier import (
@@ -76,11 +76,11 @@ Rather than using a conventional CNN backbone, we applied **KAN-Mixer**, an arch
 The end-to-end pipeline was as follows:
 
 1. **Exploratory Data Analysis** — characterised image size distributions, confirmed class balance, and visualised sample images per class.
-2. **Preprocessing** — all images were resized to 64×64 pixels and normalised with ImageNet statistics (mean `[0.485, 0.456, 0.406]`, std `[0.229, 0.224, 0.225]`). RGB conversion was applied to handle grayscale edge cases.
-3. **Data Augmentation (Phase 2)** — training images are augmented with random horizontal flips, rotation (±15°), and colour jitter (brightness/contrast ±0.2, saturation ±0.1) to close the train-test generalisation gap.
+2. **Preprocessing** — all images were resized to 256×256 pixels and normalised with ImageNet statistics (mean `[0.485, 0.456, 0.406]`, std `[0.229, 0.224, 0.225]`). RGB conversion was applied to handle grayscale edge cases.
+3. **Data Augmentation** — training images are augmented with random horizontal flips, rotation (±15°), and colour jitter (brightness/contrast ±0.2, saturation ±0.1) to close the train-test generalisation gap.
 4. **Stratified Split** — a custom stratified 80/20 split was generated with `random_seed=42`, yielding 14,075 training images and 3,472 test images, each with equal per-class representation.
-5. **Model Training** — the KAN-Mixer was trained from scratch with Adam (lr=1e-3), cross-entropy loss, batch size 128, 12 epochs on a GPU.
-6. **Evaluation** — checkpoints were saved after every epoch. The best checkpoint (epoch 12) was used for final comprehensive evaluation, including macro/micro/weighted F1, precision, recall, Top-5 and Top-10 accuracy, per-class F1.
+5. **Model Training** — the KAN-Mixer was trained from scratch with Adam (lr=1e-3), cross-entropy loss, batch size 32, for 20 epochs on a H100 GPU.
+6. **Evaluation** — checkpoints were saved after every epoch. The final checkpoint (epoch 20) was used for comprehensive evaluation, including macro/micro/weighted F1, precision, recall, Top-5 and Top-10 accuracy, per-class F1.
 
 ---
 
@@ -117,7 +117,7 @@ No additional `pip install` steps are needed in a standard Colab Pro environment
 
 ### Step 1 - Set up the runtime
 
-Open a new Colab notebook and set the runtime to **GPU** (Runtime -> Change runtime type -> GPU). The notebook was developed and validated on a H100 GPU available Google Colab Pro (_**`$10 per month`**_). An A100 or T4 will also work; expect different training times.
+Open a new Colab notebook and set the runtime to **GPU** (Runtime -> Change runtime type -> GPU). The notebook was developed and validated on a H100 GPU available on Google Colab Pro (_**`$10 per month`**_). An A100 or T4 will also work; expect different training times. Note that with 256×256 resolution, a GPU with at least 16GB VRAM is recommended.
 
 ### Step 2 - Clone the repository
 
@@ -140,7 +140,7 @@ Download the dataset (~8.7 GB) from the [authors' Google Drive link](https://dri
 
 ### Step 4 - (Optional) Download the pretrained model
 
-To skip training and run evaluation directly, download the pretrained checkpoint (~99.6 MB) from [this Google Drive link](https://drive.google.com/file/d/1vrWpiAQRsmYf2ocJFX3Ee0mM354MsuaA/view?usp=sharing) and place it at `./checkpoints/kan_mixer_coins_12.pt`. Set `USE_EXISTING_MODEL = False` and `MODEL_PATH = './checkpoints/kan_mixer_coins_12.pt'` in the evaluation cell.
+To skip training and run evaluation directly, download the pretrained checkpoint (~99.6 MB) from [this Google Drive link](https://drive.google.com/file/d/1vrWpiAQRsmYf2ocJFX3Ee0mM354MsuaA/view?usp=sharing) and place it at `./weights_coins/kan_mixer_coins_20.pt`. Set `USE_EXISTING_MODEL = False` and `MODEL_PATH = './weights_coins/kan_mixer_coins_20.pt'` in the evaluation cell.
 
 ### Step 5 - Run the notebook top to bottom
 
@@ -148,16 +148,16 @@ Execute all cells in order. Key stages are:
 
 - **EDA cells** — produce image size histogram and sample visualisations (no side effects on data).
 - **Split cell** — generates a new `split.txt` inside `CoinsDataset/` with `random_seed=42`. Must be run before the DataLoader cells.
-- **Training cell** — trains KAN-Mixer for `num_epochs` epochs with data augmentation, saving a `.pt` checkpoint after each one to `weights_coins/`.
-- **Evaluation cell** — loads the checkpoint, runs inference on the test set, and prints all metrics plus four plots.
+- **Training cell** — calls `train_model()` which trains KAN-Mixer for `num_epochs` epochs with data augmentation, saving a `.pt` checkpoint after each one to `weights_coins/`.
+- **Evaluation cell** — uses the trained model (or loads from a checkpoint file), runs inference on the test set, and prints all metrics plus four plots.
 
 ### Reproducing the Reported Results
 
 To reproduce the exact numbers in this README:
 
 1. Use `random_seed=42` in the stratified split (this is the default).
-1. Use the exact hyperparameters in `get_coin_config()`: `image_size=64`, `channel_dim=256`, `token_dim=128`, `depth=6`, `lr=1e-3`, `batch_size=128`.
-1. Train model by executing all cells starting from text `Start training KAN-Mixer` till `Evaluation` `OR` load checkpoint `kan_mixer_coins_12.pt` (epoch 12) for evaluation.
+1. Use the exact hyperparameters in `get_coin_config()`: `image_size=256`, `patch_size=8`, `channel_dim=256`, `token_dim=128`, `depth=6`, `lr=1e-3`, `batch_size=32`, `num_epochs=20`.
+1. Train model by executing all cells starting from text `Start training KAN-Mixer` till `Evaluation` `OR` load checkpoint `kan_mixer_coins_20.pt` (epoch 20) for evaluation.
 1. Run `evaluate_comprehensive()` on the test loader.
 
 Minor floating-point differences may appear between GPU types, but accuracy figures should match to within ±0.1%.
@@ -166,51 +166,49 @@ Minor floating-point differences may appear between GPU types, but accuracy figu
 
 ## Model Architecture Summary
 
-KAN-Mixer operates by dividing each 64×64 input image into non-overlapping 4×4 patches, yielding 256 patch tokens per image. These tokens are then processed through alternating token-mixing and channel-mixing KAN layers for `depth=6` rounds before a global average pool and linear classifier.
+KAN-Mixer operates by dividing each 256×256 input image into non-overlapping 8×8 patches, yielding 1024 patch tokens per image. These tokens are then processed through alternating token-mixing and channel-mixing KAN layers for `depth=6` rounds before a global average pool and linear classifier.
 
 | Hyperparameter | Value | Rationale |
 |---|---|---|
-| Input size | 64×64 px | Preserves coin details while keeping memory cost manageable |
-| Patch size | 4×4 px | Produces 256 tokens - enough spatial resolution for fine features |
+| Input size | 256×256 px | Preserves fine coin details (inscriptions, portraits) for distinguishing similar classes |
+| Patch size | 8×8 px | Produces 1024 tokens — balances spatial granularity with GPU memory constraints |
 | Channel dim | 256 | Sufficient capacity for encoding fine-grained inter-class differences |
 | Token dim | 128 | Captures spatial relationships between portrait, inscription, and symbols |
 | Depth | 6 | Early layers learn edges/textures; later layers learn coin-type identifiers |
 | Optimizer | Adam, lr=1e-3 | Conservative LR prevents overshoot in the 100-class loss surface |
-| Batch size | 128 | Fills GPU memory comfortably on a G4 instance |
+| Batch size | 32 | Reduced to fit 256×256 images with 1024 patches in H100 GPU memory |
+| Epochs | 20 | Model converges around epoch 16–17; 20 epochs verifies convergence |
 
 ---
 
 ## Experimental Results
 
-### Training Progression
+### Training Progression (Epochs 14–20, resumed from checkpoint 13)
 
-Training was run for 20 epochs; training was interrupted via keyboard interrupt after epoch 12 in the logged run, but all checkpoints were saved. The table below shows the full progression up to the interruption.
+Training was run for 20 epochs total with data augmentation at 256×256 resolution. The table below shows epochs 14–20 (resumed from checkpoint at epoch 13).
 
 | Epoch | Train Loss | Train Accuracy | Test Accuracy |
 |-------|-----------|----------------|---------------|
-| 1  | 4.3278 | 7.70%  | 7.49%  |
-| 2  | 3.8644 | 23.15% | 21.26% |
-| 3  | 2.5799 | 58.50% | 51.70% |
-| 4  | 1.3986 | 79.89% | 68.87% |
-| 5  | 0.8171 | 88.50% | 74.54% |
-| 6  | 0.5016 | 94.04% | 77.13% |
-| 7  | 0.2928 | 96.99% | 79.23% |
-| 8  | 0.1440 | 98.95% | 80.82% |
-| 9  | 0.0621 | 99.33% | 82.26% |
-| 10 | 0.0327 | 99.35% | 83.47% |
-| 11 | 0.0229 | 99.42% | 83.18% |
-| 12 | 0.0201 | 99.42% | 83.44% |
+| 14 | 0.3791 | 90.86% | 85.34% |
+| 15 | 0.3655 | 91.33% | 85.46% |
+| 16 | 0.3194 | 92.16% | 87.01% |
+| 17 | 0.2971 | 92.82% | 87.50% |
+| 18 | 0.2681 | 91.89% | 86.43% |
+| 19 | 0.2299 | 93.68% | 85.37% |
+| 20 | 0.2335 | 94.14% | 87.24% |
 
-### Final Evaluation Metrics (Checkpoint: Epoch 12)
+### Final Evaluation Metrics (Checkpoint: Epoch 20)
 
 | Metric | Value |
 |--------|-------|
-| Top-1 Accuracy | 83.4% |
-| Top-5 Accuracy | 95.6% |
-| Top-10 Accuracy | 97.6% |
-| F1 Score (Macro) | 0.818 |
-| F1 Score (Micro) | 0.834 |
-| F1 Score (Weighted) | 0.834 |
+| Top-1 Accuracy | 87.24% |
+| Top-5 Accuracy | 96.80% |
+| Top-10 Accuracy | 98.16% |
+| F1 Score (Macro) | 0.860 |
+| F1 Score (Micro) | 0.872 |
+| F1 Score (Weighted) | 0.872 |
+| Precision (Macro) | 0.865 |
+| Recall (Macro) | 0.862 |
 
 ---
 
@@ -218,53 +216,59 @@ Training was run for 20 epochs; training was interrupted via keyboard interrupt 
 
 ### What Worked
 
-**The model learns rapidly and converges strongly.** The most striking result in the training curve is the speed of initial learning - test accuracy goes from 7.5% to 74.5% in just five epochs. For a 100-class problem where random chance is 1%, reaching 74% by epoch 5 indicates that KAN-Mixer is successfully extracting discriminative coin features even at 64×64 resolution. The jump is particularly steep between epochs 2 and 3 (21% -> 51%), suggesting the model crosses a threshold in that range where it starts recognising class-level structure rather than just low-level textures.
+**The model learns rapidly and generalises well with augmentation.** With data augmentation and 256×256 resolution, the model achieves 87.24% test accuracy while maintaining a healthy train-test gap of only ~7% (94.14% train vs 87.24% test). This is a major improvement over Phase 1's 16% gap (99.4% vs 83.4%), confirming that augmentation effectively regularises the model.
 
-**The majority of classes are classified well.** The per-class F1 distribution is right-skewed: most of the 100 classes sit in the 0.80-1.00 range, and the best-performing classes (Class 40, 82, 23, 69, etc.) achieve F1 scores of 0.95-0.97. This tells us that the model has genuinely learned to distinguish the visual signatures of most coin types, and the overall macro average of 0.818 is being pulled down by a small number of outlier classes rather than reflecting uniform mediocrity.
+**The majority of classes are classified well.** The per-class F1 distribution is strongly left-skewed: most of the 100 classes sit in the 0.80–1.00 range, and the best-performing classes (Class 23, 40, 96, 85, 46, 69, etc.) achieve F1 scores of 0.95–1.0. The overall macro average of 0.860 is pulled down by a small number of outlier classes rather than reflecting uniform mediocrity.
 
-**Top-K accuracy reveals near-correct predictions.** The 12.2 percentage point jump from Top-1 (83.4%) to Top-5 (95.6%) accuracy is informative. It means that for roughly one in eight test images the model's first-ranked prediction is wrong, but the correct class is almost always in the model's top 5 candidates. The correct answer is nearby in the model's probability distribution - it is not confused in a random or semantically incoherent way. This property is useful in practice: a human expert reviewing the top-5 suggestions from the classifier would need to make a final selection, but would very rarely be looking at the wrong answer entirely.
+**Top-K accuracy reveals near-correct predictions.** The 9.6 percentage point jump from Top-1 (87.24%) to Top-5 (96.80%) accuracy means that the correct class is almost always in the model's top candidates. A human expert reviewing the top-5 suggestions would very rarely be looking at the wrong answer entirely.
+
+**Higher resolution improves difficult classes.** Increasing from 64×64 to 256×256 raised Class 60's F1 from ~0.05 to ~0.45, confirming that finer spatial details help disambiguate visually similar coin types.
 
 ### What Did Not Work
 
-**Class 16 and Class 60 are almost entirely misclassified.** The confusion matrix analysis reveals a specific and dramatic failure: of the ~22 test samples belonging to Class 16, approximately 20 are predicted as Class 60, and almost none are predicted correctly (F1 ≈ 0.05). Importantly, Class 60 is also confused with Class 16 in the reverse direction - 22 of Class 60's samples are predicted as Class 16. This is a bidirectional confusion between exactly two classes, which strongly suggests that Classes 16 and 60 share a reverse motif that is visually indistinguishable at 64×64 resolution, or that the two classes were inconsistently labelled in the original dataset. This is not a generalisation failure in the usual sense - it is either a resolution bottleneck or a labelling ambiguity that no classifier can resolve without additional context.
+**Class 15 remains nearly unresolvable.** Despite the resolution increase, Class 15 still achieves only ~0.1 F1. The confusion matrix shows 17 out of 22 Class 15 test samples are misclassified as Class 60, while Class 60 is split evenly (14 correct, 14 confused with Class 15). This bidirectional confusion suggests that these two classes share a reverse motif that is very difficult to distinguish visually — possibly representing a labelling ambiguity in the original dataset.
 
 ### Summary
 
-KAN-Mixer achieves a Top-1 accuracy of **83.4%** and a macro F1 of **0.818** on a 100-class Roman coin classification task with  no augmentation, and a modest 64×64 input resolution. This is a strong baseline result demonstrating that the architecture can meaningfully learn from numismatic imagery.
+KAN-Mixer achieves a Top-1 accuracy of **87.24%** and a macro F1 of **0.860** on a 100-class Roman coin classification task with data augmentation at 256×256 resolution — a substantial improvement over the Phase 1 baseline of 83.4% / 0.818 at 64×64.
 
 ---
 
-## Phase 2 Improvements
+## Phase 2 Improvements and Results
 
-The following improvements have been implemented in Phase 2 to address the limitations identified above:
+The following improvements were implemented in Phase 2 to address the limitations identified in Phase 1:
 
 ### 1. Data Augmentation
 
-Training data is now augmented to close the train-test generalisation gap (99.4% train vs 83.4% test accuracy). The augmentation pipeline in [`coin_classifier/dataset.py`](coin_classifier/dataset.py) applies:
+Training data is augmented to close the train-test generalisation gap (Phase 1: 99.4% train vs 83.4% test). The augmentation pipeline in [`coin_classifier/dataset.py`](coin_classifier/dataset.py) applies:
 
 - **Random horizontal flip** — coins can appear in any orientation after excavation.
 - **Random rotation (±15°)** — accounts for slight alignment variation in photographed specimens.
 - **Colour jitter** (brightness ±0.2, contrast ±0.2, saturation ±0.1) — simulates variation in lighting conditions and patina colour across different photography setups.
 
-These augmentations are applied only to the training set. The test set uses deterministic resize and normalisation for reproducible evaluation. To enable augmentation, pass `augment=True` to `get_transforms()` or `train_model()`.
+These augmentations are applied only to the training set. The test set uses deterministic resize and normalisation for reproducible evaluation.
 
-### 2. Configurable Input Resolution
+**Result:** Train-test gap reduced from ~16% to ~7% (94.14% train vs 87.24% test).
 
-The image resolution is now a configurable parameter in [`coin_classifier/config.py`](coin_classifier/config.py) via `image_size`, and both the dataset transforms and model architecture adapt automatically. This enables comparison across:
+### 2. Higher Input Resolution (256×256)
 
-| Resolution | Patches (4×4) | Expected Effect |
-|---|---|---|
-| 64×64 (baseline) | 256 | Fastest training; sufficient for most classes |
-| 128×128 | 1024 | Recovers fine inscription detail; should help ambiguous classes |
-| 256×256 | 4096 | Maximum detail; high memory cost, likely diminishing returns |
+The image resolution was increased from 64×64 to 256×256 with `patch_size=8` (yielding 1024 patches per image). To fit in GPU memory, `batch_size` was reduced from 128 to 32.
 
-To experiment with a different resolution, update `image_size` in `get_coin_config()` and retrain.
+| Resolution | Patch size | Patches | Test Accuracy |
+|---|---|---|---|
+| 64×64 (Phase 1) | 4×4 | 256 | 83.4% |
+| 256×256 (Phase 2) | 8×8 | 1024 | 87.24% |
 
-### 3. Class 16 / Class 60 Confusion Investigation
+**Result:** +3.8% absolute improvement in test accuracy. Class 60 F1 improved from ~0.05 to ~0.45.
 
-The bidirectional confusion between Class 16 and Class 60 (F1 ≈ 0.05 for both) was investigated. Visual comparison of samples from both classes shows that their reverse motifs are nearly indistinguishable to the human eye, with the primary difference being finer detail in Class 16 coins — possibly reflecting improvements in coin production tools from that era. At 64×64 resolution, these fine details are lost.
+### 3. Class 15 / Class 60 Confusion Investigation
 
-The recommended next steps for resolving this are:
+The bidirectional confusion between Class 15 and Class 60 was partially resolved by the resolution increase. At 256×256, Class 60 improved significantly (F1 ~0.05 → ~0.45), but Class 15 remains problematic (F1 ~0.1) with 17/22 test samples still misclassified as Class 60.
 
-- **Increase resolution to 128×128 or 256×256** to recover the distinguishing fine details.
-- **Consult domain experts** to confirm whether the two classes are genuinely distinct or represent a labelling ambiguity in the original dataset.
+Visual comparison shows these reverse motifs are nearly indistinguishable to the human eye, with the primary difference being finer detail in Class 15 coins.
+
+**Next step:** Consult domain experts to confirm whether the two classes are genuinely distinct or represent a labelling ambiguity in the original dataset.
+
+### 4. Checkpoint Resumption
+
+Training can now be resumed from any saved checkpoint by setting `resume_epoch` in `get_coin_config()`. Set to an integer (e.g. 13) to resume from that epoch's checkpoint, or `None` to train from scratch.
