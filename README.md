@@ -8,7 +8,14 @@ This project investigates whether a modern MLP-Mixer variant using Kolmogorov-Ar
 
 ## KAN-Mixer Library
 
-This project uses the **KAN-Mixer** architecture, which replaces the MLP layers in an MLP-Mixer with Kolmogorov-Arnold Network (KAN) layers. The library code lives in the [`KAN_Mixer/`](KAN_Mixer/) directory and provides:
+This project uses the **KAN-Mixer** architecture, which replaces the MLP layers in an MLP-Mixer with Kolmogorov-Arnold Network (KAN) layers. The KAN-Mixer code is included directly in this repository (in [`KAN_Mixer/`](KAN_Mixer/)) rather than cloned as a submodule, because we modified it to support:
+
+- **Checkpoint resumption** — added `resume_epoch` to the config and checkpoint loading logic to `train.py`, enabling training to be interrupted and continued from any saved epoch.
+- **Configurable patch size** — the original code hardcoded patch size; our version accepts it as a parameter from the config, which was necessary for scaling to 256×256 input without running out of GPU memory.
+
+The `coin_classifier` package imports the `KANMixer` model class directly from this local `KAN_Mixer/model.py` at runtime.
+
+The directory provides:
 
 - [`KAN_Mixer/model.py`](KAN_Mixer/model.py) — model architecture: `KANMixer`, `KANLinear`, `KAN`, `MixerLayer`, `PatchEmbedding`
 - [`KAN_Mixer/config.py`](KAN_Mixer/config.py) — default configuration and weight-path utilities
@@ -88,7 +95,7 @@ The end-to-end pipeline was as follows:
 
 | Name | Contributions |
 |------|--------------|
-| Ilgar Malikov | _EDA, image size analysis, dataset structure investigation, stratified split implementation_ |
+| Ilgar Malikov | _During Phase 1: EDA, image size analysis, dataset structure investigation, stratified split implementation_ |
 | Emil Mirzazada | _KAN-Mixer model integration, hyperparameter selection, training loop implementation_ |
 | Zaur Rajabov | _Comprehensive evaluation pipeline, per-class F1 analysis, confusion matrix investigation, visualisation code_ |
 
